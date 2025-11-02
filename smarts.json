@@ -1,0 +1,7 @@
+[
+  {
+    "id": "f89b5008-586f-42f3-a20a-1b2b23b8cb3b",
+    "name": "Cyclic Ether",
+    "smarts": "[O;R;X2;!$([O]=*)]([#6])[#6]"
+  }
+]

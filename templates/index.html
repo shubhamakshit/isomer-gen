@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Isomer Generator & Filter</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f0f2f5; }
+        .card { border: none; box-shadow: 0 0 15px rgba(0,0,0,0.05); }
+        .molecule-card { transition: all 0.2s ease-in-out; }
+        .molecule-card:hover { transform: translateY(-5px); box-shadow: 0 5px 20px rgba(0,0,0,0.1); }
+        .molecule-image { background: #fff; border-radius: 0.375rem; padding: 10px; height: 220px; display: flex; align-items: center; justify-content: center; }
+        .smiles-code { font-size: 0.8em; background: #e9ecef; padding: 5px; border-radius: 3px; word-break: break-all; }
+        #logContent { background-color: #212529; color: #f8f9fa; font-family: 'Courier New', monospace; }
+        .progress { height: 5px; }
+        .iupac-name { font-weight: bold; min-height: 24px; }
+        .stereo-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-size: 0.7em;
+            cursor: pointer;
+        }
+        .stereoisomer-child .card {
+            border-left: 3px solid #0d6efd;
+        }
+        body.exam-mode-on #totalIsomerCount,
+        body.exam-mode-on #filteredCount,
+        body.exam-mode-on .stereo-count {
+            visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#"><i class="bi bi-diagram-3"></i> Isomer Generator</a>
+            <div class="ms-auto d-flex align-items-center">
+                <button class="btn btn-outline-light me-2" id="commandPaletteBtn" data-bs-toggle="modal" data-bs-target="#commandPaletteModal">
+                    <i class="bi bi-search"></i> SMARTS
+                </button>
+                <div class="form-check form-switch text-white">
+                    <input class="form-check-input" type="checkbox" id="examModeToggle">
+                    <label class="form-check-label" for="examModeToggle">Exam Mode</label>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-lg-3">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white"><h5 class="mb-0"><i class="bi bi-input-cursor"></i> Input</h5></div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Molecular Formula</label>
+                            <input type="text" class="form-control" id="formulaInput" placeholder="e.g., C6H6">
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="generateIsomers()">
+                            <i class="bi bi-play-circle"></i> Generate Isomers
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Surge Options Card -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <a href="#" class="text-decoration-none" data-bs-toggle="collapse" data-bs-target="#surgeOptions">
+                                <i class="bi bi-gear"></i> Advanced Surge Options
+                            </a>
+                        </h5>
+                    </div>
+                    <div id="surgeOptions" class="collapse">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="surge-u">
+                                        <label class="form-check-label small" for="surge-u">Count only (-u)</label>
+                                    </div>
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="surge-T">
+                                        <label class="form-check-label small" for="surge-T">No triple bonds (-T)</label>
+                                    </div>
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="surge-P">
+                                        <label class="form-check-label small" for="surge-P">Planar only (-P)</label>
+                                    </div>
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="surge-b">
+                                        <label class="form-check-label small" for="surge-b">Even-length rings (-b)</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-2">
+                                        <label for="surge-d" class="form-label small">Max degree (-d)</label>
+                                        <input type="text" class="form-control form-control-sm" id="surge-d" placeholder="4">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="surge-c" class="form-label small">Max coordination (-c)</label>
+                                        <input type="text" class="form-control form-control-sm" id="surge-c" placeholder="4">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label for="surge-B" class="form-label small">Avoid substructures (-B)</label>
+                                <input type="text" class="form-control form-control-sm" id="surge-B" placeholder="e.g., 1,2,9">
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-2">
+                                        <label for="surge-e" class="form-label small">Non-H bonds (-e)</label>
+                                        <input type="text" class="form-control form-control-sm" id="surge-e" placeholder="e.g., 4:8">
+                                    </div>
+                                     <div class="mb-2">
+                                        <label for="surge-t" class="form-label small">3-rings (-t)</label>
+                                        <input type="text" class="form-control form-control-sm" id="surge-t" placeholder="e.g., 0:1">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                     <div class="mb-2">
+                                        <label for="surge-f" class="form-label small">4-rings (-f)</label>
+                                        <input type="text" class="form-control form-control-sm" id="surge-f" placeholder="e.g., 0">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="surge-p" class="form-label small">5-rings (-p)</label>
+                                        <input type="text" class="form-control form-control-sm" id="surge-p">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" id="filterCard" style="display: none;">
+                    <div class="card-header bg-success text-white"><h5 class="mb-0"><i class="bi bi-funnel"></i> Filter & Sort</h5></div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Generate SMARTS with AI</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="aiSmartsInput" placeholder="e.g., primary alcohol">
+                                <button class="btn btn-outline-primary" type="button" onclick="generateSmartsWithAI()">
+                                    <i class="bi bi-magic"></i> Generate
+                                </button>
+                            </div>
+                            <div id="aiDescription" class="form-text text-muted mt-1"></div>
+                        </div>
+                        <hr>
+                        <div class="mb-3">
+                            <label class="form-label">SMARTS Pattern</label>
+                            <input type="text" class="form-control" id="smartsInput" placeholder="[#6]-[#6](-[#6])-[#8]">
+                        </div>
+                        <button class="btn btn-success w-100" onclick="applyFilter()">
+                            <i class="bi bi-filter"></i> Apply Filter
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-9">
+                <div id="statsAlert" class="alert alert-info" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Formula:</strong> <span class="fw-bold" id="formulaDisplay"></span> | 
+                            Total Isomers: <span class="fw-bold" id="totalIsomerCount">0</span>
+                        </div>
+                        <button id="showLogsBtn" class="btn btn-sm btn-outline-secondary" style="display: none;" data-bs-toggle="modal" data-bs-target="#logModal"><i class="bi bi-file-text"></i> Logs</button>
+                    </div>
+                    <div class="progress mt-2" id="progressBarContainer" style="display: none !important;">
+                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
+                    </div>
+                </div>
+
+                <ul class="nav nav-tabs" id="viewTabs" style="display: none;">
+                    <li class="nav-item"><a class="nav-link active" href="#" onclick="showView('all')">All Isomers</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" id="filteredTabView" onclick="showView('filtered')">Filtered (<span id="filteredCount">0</span>)</a></li>
+                </ul>
+
+                <div class="card mt-2">
+                    <div class="card-body">
+                        <div id="allView">
+                            <div class="row g-3"></div>
+                        </div>
+                        <div id="filteredView" style="display: none;">
+                            <div class="row g-3"></div>
+                        </div>
+                        <div id="emptyState" class="text-center py-5">
+                            <i class="bi bi-inbox" style="font-size: 4rem; color: #dee2e6;"></i>
+                            <h4 class="mt-3 text-muted">No molecules loaded</h4>
+                        </div>
+                    </div>
+                </div>
+                <div id="paginationControls" class="d-flex justify-content-center mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="logModal" tabindex="-1">
+        <div class="modal-dialog modal-xl"><div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Logs</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body"><pre id="logContent"></pre></div>
+        </div></div>
+    </div>
+
+    <!-- Command Palette Modal -->
+    <div class="modal fade" id="commandPaletteModal" tabindex="-1" aria-labelledby="commandPaletteModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="commandPaletteModalLabel">SMARTS Command Palette</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                        <div class="modal-body">
+                            <ul class="nav nav-tabs" id="paletteTabs">
+                                <li class="nav-item"><a class="nav-link active" href="#" onclick="showPaletteTab('search')">Search</a></li>
+                                <li class="nav-item"><a class="nav-link" href="#" onclick="showPaletteTab('new')">Add New</a></li>
+                                <li class="nav-item" id="editTab" style="display: none;"><a class="nav-link" href="#" onclick="showPaletteTab('edit')">Edit</a></li>
+                            </ul>
+                            <div id="searchPalette">
+                                <div class="mb-3">
+                                    <input type="text" class="form-control" id="smartsSearchInput" placeholder="Search by name or SMARTS... (Press '/' to focus)">
+                                </div>
+                                <ul class="list-group" id="smartsSearchResults"></ul>
+                            </div>
+                            <div id="newPalette" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="newSmartsName" class="form-label">Name</label>
+                                    <input type="text" class="form-control" id="newSmartsName" placeholder="e.g., Phenyl Ring">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newSmartsValue" class="form-label">SMARTS Key</label>
+                                    <input type="text" class="form-control" id="newSmartsValue" placeholder="e.g., c1ccccc1">
+                                </div>
+                                <button class="btn btn-primary" onclick="saveNewSmarts()">Save SMARTS</button>
+                            </div>
+                            <div id="editPalette" style="display: none;">
+                                <input type="hidden" id="editSmartsId">
+                                <div class="mb-3">
+                                    <label for="editSmartsName" class="form-label">Name</label>
+                                    <input type="text" class="form-control" id="editSmartsName">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="editSmartsValue" class="form-label">SMARTS Key</label>
+                                    <input type="text" class="form-control" id="editSmartsValue">
+                                </div>
+                                <button class="btn btn-primary" onclick="updateSmarts()">Update SMARTS</button>
+                                <button class="btn btn-danger" onclick="deleteSmarts()">Delete</button>
+                            </div>
+                        </div>            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let taskId = null, iupacJobId = null, iupacPollInterval = null, logInterval = null, pageSize = 24;
+        let allIsomersState = { currentPage: 1, totalPages: 1, totalCount: 0, cache: {} };
+        let filteredIsomersState = { currentPage: 1, totalPages: 1, totalCount: 0, smarts: '', sortBy: 'chain_length', cache: {} };
+        let currentView = 'all';
+
+        async function generateIsomers() {
+            const formula = document.getElementById('formulaInput').value.trim();
+            if (!formula) return alert('Please enter a molecular formula');
+
+            const surge_options = {};
+            document.querySelectorAll('[id^="surge-"]').forEach(el => {
+                const flag = `-${el.id.split('-')[1]}`;
+                if (el.type === 'checkbox') {
+                    if (el.checked) surge_options[flag] = true;
+                } else if (el.type === 'text' || el.type === 'number') {
+                    if (el.value) surge_options[flag] = el.value;
+                }
+            });
+
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('statsAlert').style.display = 'none';
+            document.getElementById('viewTabs').style.display = 'none';
+            document.getElementById('paginationControls').innerHTML = '';
+            document.getElementById('progressBarContainer').style.display = 'block';
+            updateProgressBar(5, 'Requesting isomer generation...');
+
+            try {
+                const response = await fetch('/generate_isomers', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ formula, surge_options }) 
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to start generation');
+
+                taskId = data.task_id;
+                allIsomersState = { currentPage: 1, totalPages: Math.ceil(data.num_isomers / pageSize), totalCount: data.num_isomers, cache: {} };
+                filteredIsomersState = { ...filteredIsomersState, totalCount: 0, smarts: '', sortBy: 'chain_length', cache: {} };
+
+                document.getElementById('statsAlert').style.display = 'block';
+                document.getElementById('formulaDisplay').textContent = data.formula;
+                document.getElementById('totalIsomerCount').textContent = data.num_isomers;
+                document.getElementById('showLogsBtn').style.display = 'inline-block';
+                startLogPolling();
+
+                await loadMolecules('all', 1);
+                document.getElementById('filterCard').style.display = 'block';
+                document.getElementById('viewTabs').style.display = 'flex';
+                showView('all');
+            } catch (error) {
+                alert('Error: ' + error.message);
+                stopLogPolling();
+            }
+        }
+
+        async function loadMolecules(view, page) {
+            if (!taskId) return;
+            const state = view === 'all' ? allIsomersState : filteredIsomersState;
+            state.currentPage = page;
+
+            const resultsGrid = document.getElementById(`${view}View`).querySelector('.row');
+            resultsGrid.innerHTML = '<div class="text-center py-5 w-100"><div class="spinner-border text-primary"></div><p>Loading page...</p></div>';
+            renderPagination();
+
+            if (state.cache[page]) {
+                await displayMolecules(state.cache[page], view);
+                return;
+            }
+
+            updateProgressBar(10, `Fetching page ${page} of ${state.totalPages}...`);
+
+            try {
+                const response = await fetch('/get_molecules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId, page, page_size: pageSize, smarts_filter: view === 'filtered' ? filteredIsomersState.smarts : '' })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to load molecules');
+
+                state.cache[page] = data.molecules;
+                if (view === 'filtered') {
+                    state.totalCount = data.total_filtered_count;
+                    state.totalPages = Math.ceil(state.totalCount / pageSize);
+                    document.getElementById('filteredCount').textContent = state.totalCount;
+                }
+
+                await displayMolecules(data.molecules, view);
+                renderPagination();
+                updateProgressBar(100, 'Page loaded');
+                setTimeout(() => { document.getElementById('progressBarContainer').style.display = 'none'; }, 2000);
+
+            } catch (error) {
+                alert('Error: ' + error.message);
+                resultsGrid.innerHTML = '<div class="text-center py-5 w-100 text-danger">Failed to load page.</div>';
+            }
+        }
+
+        function applyFilter() {
+            filteredIsomersState.smarts = document.getElementById('smartsInput').value.trim();
+            filteredIsomersState.cache = {};
+            filteredIsomersState.currentPage = 1;
+            showView('filtered');
+            loadMolecules('filtered', 1);
+        }
+
+        async function generateSmartsWithAI() {
+            const description = document.getElementById('aiSmartsInput').value.trim();
+            if (!description) return alert('Please enter a description for the AI.');
+
+            const generateBtn = document.querySelector('[onclick="generateSmartsWithAI()"]');
+            const originalBtnContent = generateBtn.innerHTML;
+            generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+            generateBtn.disabled = true;
+            document.getElementById('aiDescription').textContent = '';
+
+            try {
+                const response = await fetch('/generate_smarts_from_ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description, task_id: taskId })
+                });
+
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'AI failed to generate SMARTS.');
+                }
+
+                document.getElementById('smartsInput').value = data.data.smarts;
+                document.getElementById('aiDescription').textContent = `AI: ${data.data.description}`;
+
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                generateBtn.innerHTML = originalBtnContent;
+                generateBtn.disabled = false;
+            }
+        }
+
+        async function displayMolecules(molecules, view, isResort = false) {
+            const container = document.getElementById(`${view}View`).querySelector('.row');
+            if (isResort) {
+                container.innerHTML = '';
+            } else {
+                container.innerHTML = molecules.length ? '' : '<div class="text-center py-5 w-100"><p>No molecules found.</p></div>';
+            }
+            
+            molecules.forEach(mol => {
+                const cardContainer = document.createElement('div');
+                cardContainer.className = 'col-xl-3 col-lg-4 col-md-6';
+                cardContainer.id = `mol-container-${mol.id}`;
+                cardContainer.innerHTML = createMoleculeCardHTML(mol, view);
+                container.appendChild(cardContainer);
+            });
+
+            if (view === 'filtered' && molecules.length > 0 && !isResort) {
+                await startIUPACJob(molecules);
+            }
+        }
+
+        async function startIUPACJob(molecules) {
+            const smiles_list = molecules.map(m => m.smiles);
+            try {
+                const response = await fetch('/start_iupac_batch_job', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ smiles_list, task_id: taskId })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to start IUPAC job');
+                iupacJobId = data.job_id;
+                document.getElementById('progressBarContainer').style.display = 'block';
+                updateProgressBar(0, 'Fetching IUPAC names...');
+                pollIUPACJob();
+            } catch (error) {
+                alert('Error starting IUPAC lookup: ' + error.message);
+            }
+        }
+
+        function pollIUPACJob() {
+            if (iupacPollInterval) clearInterval(iupacPollInterval);
+            iupacPollInterval = setInterval(async () => {
+                if (!iupacJobId) return;
+                console.log(`Polling for IUPAC job ${iupacJobId}`);
+                try {
+                    const response = await fetch(`/get_iupac_batch_job/${iupacJobId}`);
+                    const data = await response.json();
+                    console.log('Received IUPAC job status:', data.status);
+
+                    if (data.status === 'SUCCESS') {
+                        console.log('IUPAC job finished successfully.');
+                        clearInterval(iupacPollInterval);
+                        iupacJobId = null;
+                        updateProgressBar(100, 'IUPAC names loaded.');
+                        setTimeout(() => document.getElementById('progressBarContainer').style.display = 'none', 2000);
+                        
+                        const iupacData = new Map(data.results.map(r => [r.smiles, r]));
+                        console.log('Created IUPAC data map:', iupacData);
+
+                        const currentMolecules = filteredIsomersState.cache[filteredIsomersState.currentPage];
+                        console.log('Current molecules from cache:', currentMolecules);
+                        
+                        currentMolecules.forEach(mol => {
+                            const iupacInfo = iupacData.get(mol.smiles);
+                            if (iupacInfo) {
+                                mol.iupac = iupacInfo.iupac || 'Not Found';
+                                mol.chain_length = iupacInfo.chain_length || 0;
+                            }
+                        });
+
+                        console.log('Molecules after adding IUPAC info:', currentMolecules);
+
+                        currentMolecules.sort((a, b) => b.chain_length - a.chain_length);
+                        console.log('Molecules after sorting:', currentMolecules);
+
+                        filteredIsomersState.cache[filteredIsomersState.currentPage] = currentMolecules;
+                        console.log('Updated cache with sorted molecules.');
+
+                        await displayMolecules(currentMolecules, 'filtered', true);
+
+                    } else if (data.status === 'FAILURE') {
+                        console.error('IUPAC job failed:', data.error);
+                        clearInterval(iupacPollInterval);
+                        iupacJobId = null;
+                        alert('Failed to fetch IUPAC names: ' + data.error);
+                    } else {
+                        console.log('IUPAC job still running...');
+                        const currentProgress = parseFloat(document.getElementById('progressBar').style.width) || 0;
+                        if (currentProgress < 90) {
+                            updateProgressBar(currentProgress + 5, 'Fetching IUPAC names...');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    clearInterval(iupacPollInterval);
+                    iupacJobId = null;
+                }
+            }, 3000);
+        }
+
+        function renderPagination() {
+            const state = currentView === 'all' ? allIsomersState : filteredIsomersState;
+            const container = document.getElementById('paginationControls');
+            container.innerHTML = '';
+            if (state.totalPages <= 1) return;
+
+            let html = '<ul class="pagination"> ';
+            const maxPagesToShow = 7;
+            let startPage = Math.max(1, state.currentPage - Math.floor(maxPagesToShow / 2));
+            let endPage = Math.min(state.totalPages, startPage + maxPagesToShow - 1);
+            if (endPage - startPage + 1 < maxPagesToShow) startPage = Math.max(1, endPage - maxPagesToShow + 1);
+
+            html += `<li class="page-item ${state.currentPage === 1 ? 'disabled' : ''}"><a class="page-link" href="#" onclick="loadMolecules('${currentView}', ${state.currentPage - 1})">Prev</a></li>`;
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<li class="page-item ${i === state.currentPage ? 'active' : ''}"><a class="page-link" href="#" onclick="loadMolecules('${currentView}', ${i})">${i}</a></li>`;
+            }
+            html += `<li class="page-item ${state.currentPage === state.totalPages ? 'disabled' : ''}"><a class="page-link" href="#" onclick="loadMolecules('${currentView}', ${state.currentPage + 1})">Next</a></li>`;
+            html += '</ul>';
+            container.innerHTML = html;
+        }
+
+        function showView(view) {
+            currentView = view;
+            document.getElementById('allView').style.display = view === 'all' ? 'block' : 'none';
+            document.getElementById('filteredView').style.display = view === 'filtered' ? 'block' : 'none';
+            document.querySelectorAll('#viewTabs .nav-link').forEach(el => el.classList.remove('active'));
+            document.querySelector(`#viewTabs a[onclick="showView('${view}')"]`).classList.add('active');
+            renderPagination();
+        }
+
+        function updateProgressBar(p, text='') { const bar = document.getElementById('progressBar'); bar.style.width = `${p}%`; bar.textContent = text; }
+        function startLogPolling() { if (logInterval) clearInterval(logInterval); logInterval = setInterval(fetchLogs, 2000); }
+        function stopLogPolling() { if (logInterval) clearInterval(logInterval); logInterval = null; setTimeout(fetchLogs, 1000); }
+        async function fetchLogs() {
+            if (!taskId) return;
+            try {
+                const response = await fetch(`/get_logs/${taskId}`);
+                document.getElementById('logContent').textContent = await response.text();
+            } catch (error) { console.error("Error fetching logs:", error); }
+        }
+
+        function createMoleculeCardHTML(mol, view) {
+            let iupacNameHTML;
+            if (view === 'filtered') {
+                if (mol.iupac && mol.iupac !== 'NOT_FOUND' && !mol.iupac.startsWith('Error')) {
+                    iupacNameHTML = mol.iupac;
+                } else {
+                    iupacNameHTML = '<span class="placeholder col-7"></span>';
+                }
+            } else {
+                iupacNameHTML = '';
+            }
+
+            const isStereo = mol.stereoisomers && mol.stereoisomers.length > 1;
+            const stereoAttrs = isStereo ? `data-stereoisomers='${JSON.stringify(mol.stereoisomers)}' data-original-smiles='${mol.smiles}' data-original-image='${mol.image}'` : '';
+            const stereoBadge = isStereo ? `<div class="stereo-badge" onclick="event.stopPropagation(); toggleStereoisomers(this.closest('.col-xl-3'), '${view}')"><i class="bi bi-collection"></i> <span class="stereo-count">${mol.stereoisomers.length}</span></div>` : '';
+
+            return `
+                <div class="card molecule-card mb-3" data-smiles="${mol.smiles}" ${stereoAttrs}>
+                    <div class="card-body position-relative">
+                        <div class="iupac-name text-center mb-2 ${view === 'filtered' && !mol.iupac ? 'placeholder-glow' : ''}">${iupacNameHTML}</div>
+                        <div class="molecule-image mb-2"><img src="${mol.image}" class="img-fluid"></div>
+                        <div class="smiles-code">${mol.smiles}</div>
+                        ${stereoBadge}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function toggleStereoisomers(cardContainer, view) {
+            const isExpanded = cardContainer.dataset.expanded === 'true';
+            const card = cardContainer.querySelector('.card');
+
+            if (isExpanded) {
+                // Collapse
+                const originalSmiles = card.dataset.originalSmiles;
+                const originalImage = card.dataset.originalImage;
+                
+                document.querySelectorAll(`.stereoisomer-child-of-${cardContainer.id}`).forEach(child => child.remove());
+                
+                card.querySelector('.smiles-code').textContent = originalSmiles;
+                card.querySelector('.molecule-image img').src = originalImage;
+                card.dataset.smiles = originalSmiles;
+                cardContainer.dataset.expanded = 'false';
+                cardContainer.querySelector('.stereo-badge').innerHTML = `<i class="bi bi-collection"></i> ${JSON.parse(card.dataset.stereoisomers).length}`;
+
+            } else {
+                // Expand
+                const stereoisomers = JSON.parse(card.dataset.stereoisomers);
+                
+                cardContainer.dataset.expanded = 'true';
+                const badge = cardContainer.querySelector('.stereo-badge');
+                badge.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
+
+                try {
+                    const response = await fetch('/get_molecules_by_smiles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ smiles_list: stereoisomers })
+                    });
+                    const data = await response.json();
+                    if (!data.success) throw new Error('Failed to fetch stereoisomers');
+
+                    // Replace the parent card with the first isomer
+                    const firstIsomer = data.molecules[0];
+                    card.querySelector('.smiles-code').textContent = firstIsomer.smiles;
+                    card.querySelector('.molecule-image img').src = firstIsomer.image;
+                    card.dataset.smiles = firstIsomer.smiles;
+                    
+                    // Add the other isomers
+                    let lastElement = cardContainer;
+                    for (let i = 1; i < data.molecules.length; i++) {
+                        const isomer = data.molecules[i];
+                        const newCardContainer = document.createElement('div');
+                        newCardContainer.className = `col-xl-3 col-lg-4 col-md-6 stereoisomer-child stereoisomer-child-of-${cardContainer.id}`;
+                        newCardContainer.innerHTML = createMoleculeCardHTML(isomer, view);
+                        lastElement.after(newCardContainer);
+                        lastElement = newCardContainer;
+                    }
+                    badge.innerHTML = '<i class="bi bi-x-lg"></i>';
+
+                } catch (error) {
+                    console.error('Failed to expand stereoisomers:', error);
+                    badge.innerHTML = '<i class="bi bi-exclamation-triangle"></i>';
+                    cardContainer.dataset.expanded = 'false';
+                }
+            }
+        }
+
+        document.getElementById('examModeToggle').addEventListener('change', function() {
+            if (this.checked) {
+                document.body.classList.add('exam-mode-on');
+            } else {
+                document.body.classList.remove('exam-mode-on');
+            }
+        });
+
+        // Command Palette
+        const commandPaletteModal = new bootstrap.Modal(document.getElementById('commandPaletteModal'));
+        const smartsSearchInput = document.getElementById('smartsSearchInput');
+        const smartsSearchResults = document.getElementById('smartsSearchResults');
+
+        async function searchSmarts(query = '') {
+            const response = await fetch(`/search_smarts?query=${encodeURIComponent(query)}`);
+            const results = await response.json();
+            smartsSearchResults.innerHTML = '';
+            results.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.innerHTML = `
+                    <div style="cursor: pointer;" data-smarts="${item.smarts}">
+                        <strong>${item.name}</strong><br>
+                        <small class="text-muted">${item.smarts}</small>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary me-2" data-id="${item.id}" data-name="${item.name}" data-smarts="${item.smarts}"><i class="bi bi-pencil"></i></button>
+                    </div>
+                `;
+                smartsSearchResults.appendChild(li);
+            });
+        }
+
+        smartsSearchResults.addEventListener('click', function(event) {
+            const target = event.target.closest('button');
+            if (target) {
+                const id = target.dataset.id;
+                const name = target.dataset.name;
+                const smarts = target.dataset.smarts;
+                editSmarts(event, id, name, smarts);
+            } else {
+                const div = event.target.closest('div[data-smarts]');
+                if (div) {
+                    loadSmarts(div.dataset.smarts);
+                }
+            }
+        });
+
+        function loadSmarts(smarts) {
+            document.getElementById('smartsInput').value = smarts;
+            commandPaletteModal.hide();
+        }
+
+        function editSmarts(event, id, name, smarts) {
+            event.stopPropagation();
+            document.getElementById('editSmartsId').value = id;
+            document.getElementById('editSmartsName').value = name;
+            document.getElementById('editSmartsValue').value = smarts;
+            showPaletteTab('edit');
+        }
+
+        async function updateSmarts() {
+            const id = document.getElementById('editSmartsId').value;
+            const name = document.getElementById('editSmartsName').value.trim();
+            const smarts = document.getElementById('editSmartsValue').value.trim();
+            console.log(`Updating SMARTS with id: ${id}, name: ${name}, smarts: ${smarts}`);
+            if (!name || !smarts) return alert('Name and SMARTS key are required.');
+
+            const response = await fetch('/update_smarts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, name, smarts })
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert('SMARTS key updated!');
+                showPaletteTab('search');
+                searchSmarts();
+            } else {
+                alert('Error: ' + (result.error || 'Failed to update SMARTS key.'));
+            }
+        }
+
+        async function deleteSmarts() {
+            const id = document.getElementById('editSmartsId').value;
+            console.log(`Deleting SMARTS with id: ${id}`);
+            if (!confirm('Are you sure you want to delete this SMARTS key?')) return;
+
+            const response = await fetch('/delete_smarts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert('SMARTS key deleted!');
+                showPaletteTab('search');
+                searchSmarts();
+            } else {
+                alert('Error: ' + (result.error || 'Failed to delete SMARTS key.'));
+            }
+        }
+
+        async function saveNewSmarts() {
+            const name = document.getElementById('newSmartsName').value.trim();
+            const smarts = document.getElementById('newSmartsValue').value.trim();
+            if (!name || !smarts) return alert('Please provide both a name and a SMARTS key.');
+
+            const response = await fetch('/save_smarts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, smarts })
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert('SMARTS key saved!');
+                document.getElementById('newSmartsName').value = '';
+                document.getElementById('newSmartsValue').value = '';
+                showPaletteTab('search');
+                searchSmarts();
+            } else {
+                alert('Error: ' + (result.error || 'Failed to save SMARTS key.'));
+            }
+        }
+
+        function showPaletteTab(tab) {
+            document.getElementById('searchPalette').style.display = tab === 'search' ? 'block' : 'none';
+            document.getElementById('newPalette').style.display = tab === 'new' ? 'block' : 'none';
+            document.getElementById('editPalette').style.display = tab === 'edit' ? 'block' : 'none';
+            
+            document.getElementById('editTab').style.display = tab === 'edit' ? 'block' : 'none';
+
+            document.querySelectorAll('#paletteTabs .nav-link').forEach(el => el.classList.remove('active'));
+            document.querySelector(`#paletteTabs a[onclick="showPaletteTab('${tab}')"]`).classList.add('active');
+        }
+
+        document.getElementById('commandPaletteModal').addEventListener('shown.bs.modal', () => {
+            showPaletteTab('search');
+            searchSmarts();
+            smartsSearchInput.focus();
+        });
+
+        smartsSearchInput.addEventListener('input', () => searchSmarts(smartsSearchInput.value));
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.key === 'k') {
+                event.preventDefault();
+                commandPaletteModal.toggle();
+            }
+            if (commandPaletteModal._isShown) {
+                if (event.key === '/') {
+                    event.preventDefault();
+                    smartsSearchInput.focus();
+                }
+                if (event.ctrlKey && event.key === 'j') {
+                    event.preventDefault();
+                    const tabs = Array.from(document.querySelectorAll('#paletteTabs .nav-link'));
+                    const activeTab = document.querySelector('#paletteTabs .nav-link.active');
+                    const activeIndex = tabs.indexOf(activeTab);
+                    const nextTab = tabs[(activeIndex + 1) % tabs.length];
+                    nextTab.click();
+                }
+                if (event.ctrlKey && event.key === 'l') {
+                    event.preventDefault();
+                    const tabs = Array.from(document.querySelectorAll('#paletteTabs .nav-link'));
+                    const activeTab = document.querySelector('#paletteTabs .nav-link.active');
+                    const activeIndex = tabs.indexOf(activeTab);
+                    const prevTab = tabs[(activeIndex - 1 + tabs.length) % tabs.length];
+                    prevTab.click();
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>
